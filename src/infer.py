@@ -28,7 +28,7 @@ def prepare_image(path: str, image_size: int, device: torch.device):
 @torch.no_grad()
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/mobilenetv3_multibranch.yaml")
+    parser.add_argument("--config", default="configs/mobilenetv3_defactify_all.yaml")
     parser.add_argument("--checkpoint", default="outputs/best_model.pt")
     parser.add_argument("--image", required=True)
     args = parser.parse_args()

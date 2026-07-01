@@ -11,7 +11,7 @@ from .utils import get_device, load_config
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/mobilenetv3_multibranch.yaml")
+    parser.add_argument("--config", default="configs/mobilenetv3_defactify_all.yaml")
     parser.add_argument("--checkpoint", default="outputs/best_model.pt")
     parser.add_argument("--output", default="outputs/aigc_detector.onnx")
     args = parser.parse_args()

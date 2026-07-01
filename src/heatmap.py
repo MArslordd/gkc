@@ -15,7 +15,7 @@ from .utils import get_device, load_config
 @torch.no_grad()
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/mobilenetv3_multibranch.yaml")
+    parser.add_argument("--config", default="configs/mobilenetv3_defactify_all.yaml")
     parser.add_argument("--checkpoint", default="outputs/best_model.pt")
     parser.add_argument("--image", required=True)
     parser.add_argument("--patch", type=int, default=224)

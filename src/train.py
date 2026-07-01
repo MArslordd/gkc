@@ -52,7 +52,7 @@ def run_epoch(model, loader, criterion, device, optimizer=None, scaler=None, amp
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/mobilenetv3_multibranch.yaml")
+    parser.add_argument("--config", default="configs/mobilenetv3_defactify_all.yaml")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
