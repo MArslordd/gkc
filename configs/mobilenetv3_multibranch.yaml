@@ -2,14 +2,14 @@ seed: 42
 device: cuda
 
 data:
-  root: data/genimage_imagenet
+  root: data/defactify_all
   image_size: 224
-  num_workers: 4
+  num_workers: 8
   class_names: [real, fake]
 
 train:
   epochs: 20
-  batch_size: 32
+  batch_size: 64
   lr: 0.0003
   weight_decay: 0.0001
   label_smoothing: 0.05
@@ -25,5 +25,5 @@ model:
   hidden_dim: 512
 
 output:
-  dir: outputs
+  dir: outputs_multibranch
   checkpoint_name: best_model.pt

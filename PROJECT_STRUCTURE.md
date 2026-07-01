@@ -1,107 +1,73 @@
-# 项目整体框架
+# 项目结构
 
-本项目面向轻量化 AIGC 图像检测，目标是构建一个可以训练、评估、部署和可视化解释的二分类检测系统。项目分为数据准备、模型训练、模型评估、端侧导出、Patch 级定位分析五个部分。
+本项目是一套轻量化 AIGC 图像检测工程，当前主线是：
 
-## 目录结构
+```text
+Defactify 全生成器整图训练
+-> MobileNetV3 RGB/SRM/FFT 三分支检测
+-> DiffSeg30k 局部 AIGC Patch 展示与 patch-level 训练
+```
+
+## 目录
 
 ```text
 gongkechuang/
   configs/
-    mobilenetv3_cifake.yaml              # CIFAKE RGB baseline 配置
-    mobilenetv3_genimage_10gb.yaml       # GenImage 10GB RGB baseline 配置
-    mobilenetv3_multibranch.yaml         # RGB + SRM + FFT 三分支配置
-
-  data/
-    cifake/                              # CIFAKE 整理后的训练数据
-    cifake_raw/                          # CIFAKE 原始下载数据
-    genimage_10gb/                       # GenImage 10GB 子集，整理后生成
+    mobilenetv3_cifake.yaml              # CIFAKE 快速 baseline
+    mobilenetv3_defactify.yaml           # Defactify seen/unseen 泛化实验
+    mobilenetv3_defactify_all.yaml       # Defactify 全生成器 full 模型
+    mobilenetv3_diffseg30k_patch.yaml    # DiffSeg30k patch-level 模型
+    mobilenetv3_multibranch.yaml         # 通用三分支模板
 
   docs/
-    EXPERIMENT_ROADMAP.md                # 实验路线和阶段安排
-    PATCH_INNOVATION.md                  # Patch 切割创新点说明
-
-  outputs/
-    checkpoints/                         # 通用 checkpoint 输出目录
-    metrics/                             # 通用指标输出目录
-    visualizations/                      # 通用可视化输出目录
-
-  outputs_cifake/
-    best_model.pt                        # CIFAKE baseline 最优权重
-    train_history.json                   # CIFAKE baseline 训练日志
-    eval_test_seen.json                  # CIFAKE baseline 测试结果
-    aigc_detector_cifake.onnx            # CIFAKE ONNX 模型结构
-    aigc_detector_cifake.onnx.data       # CIFAKE ONNX 外置权重
-
-  outputs_genimage_10gb/
-    checkpoints/                         # GenImage 实验权重
-    metrics/                             # GenImage 实验指标
-    visualizations/                      # GenImage 可视化结果
+    EXPERIMENT_ROADMAP.md                # 推荐实验流程
+    PATCH_INNOVATION.md                  # Patch 方法、训练和展示说明
 
   reports/
-    figures/                             # 报告图片、曲线、热力图
+    figures/                             # 报告图片
     tables/                              # 实验表格
 
   scripts/
-    check_cuda.py                        # 检查 CUDA 和 GPU
+    check_cuda.py                        # 检查 CUDA/GPU
     prepare_cifake.py                    # 整理 CIFAKE
-    prepare_genimage.py                  # 整理 GenImage，支持约 10GB 抽样
-    prepare_tgif_patch_demo.py           # 从 TGIF/TGIF2 准备 Patch 展示样本
+    prepare_defactify.py                 # 整理 Defactify
+    prepare_diffseg30k_patch_demo.py     # 下载/整理 100 张 Patch 展示图
+    prepare_diffseg30k_patch_dataset.py  # 根据 mask 切 patch 训练集
+    batch_heatmap.py                     # 批量生成 Patch heatmap
 
   src/
-    datasets.py                          # 数据加载和 RGB/SRM/FFT 输入生成
-    evaluate.py                          # 测试集评估
-    export_onnx.py                       # ONNX 导出
-    fft_features.py                      # FFT 频域图生成
-    heatmap.py                           # Patch 滑窗热力图
-    infer.py                             # 单图推理
-    metrics.py                           # Accuracy/Precision/Recall/F1/AUC
-    model.py                             # MobileNetV3 单分支/多分支模型
-    srm.py                               # SRM 高频残差图生成
+    datasets.py                          # 读取 real/fake 目录并生成 RGB/SRM/FFT 输入
+    model.py                             # MobileNetV3 单分支/三分支模型
     train.py                             # 训练入口
+    evaluate.py                          # 评估入口
+    infer.py                             # 单图推理
+    heatmap.py                           # 单图 Patch heatmap
+    export_onnx.py                       # ONNX 导出
+    srm.py                               # SRM 高频残差
+    fft_features.py                      # FFT 频域特征
+    metrics.py                           # Accuracy/Precision/Recall/F1/AUC
     utils.py                             # 配置、设备、JSON 工具
 
-  BASELINE_SUMMARY.md                    # CIFAKE baseline 总结
-  DATASET_SELECTION.md                   # 数据集选择和整理说明
-  README.md                              # 项目说明和运行命令
+  BASELINE_SUMMARY.md                    # CIFAKE baseline 结果
+  DATASET_SELECTION.md                   # 数据集选择说明
+  PROJECT_SUMMARY.md                     # 项目总结
   PROJECT_STRUCTURE.md                   # 当前文件
+  README.md                              # 快速开始
   requirements.txt                       # Python 依赖
 ```
 
-## 模型路线
+## 不再维护的内容
 
-第一阶段是 RGB-only baseline：
+以下内容已从主线删除：
 
-```text
-RGB image -> MobileNetV3-Small -> MLP classifier -> real/fake
-```
+- TGIF 相关脚本：数据较旧，且当前展示数据已切换到 DiffSeg30k。
+- GenImage 命令行下载/整理脚本：下载成本高，当前主训练集切换为 Defactify。
+- `tools/` 下载工具和 `outputs_*` 训练产物：不属于源码，应由 `.gitignore` 忽略。
 
-第二阶段是多分支检测器：
+## 当前推荐主线
 
-```text
-RGB image -> MobileNetV3 branch -> feature_rgb
-SRM image -> MobileNetV3 branch -> feature_srm
-FFT image -> MobileNetV3 branch -> feature_fft
-
-concat(feature_rgb, feature_srm, feature_fft)
--> MLP classifier
--> real/fake
-```
-
-第三阶段是 Patch 级定位分析：
-
-```text
-input image
--> sliding window patch crop
--> each patch gets fake_score
--> aggregate fake_score map
--> overlay heatmap on original image
-```
-
-## 推荐实验顺序
-
-1. CIFAKE RGB baseline：确认训练链路、评估链路和 ONNX 导出链路。
-2. GenImage 10GB RGB baseline：在更高分辨率、多生成器数据上建立新 baseline。
-3. GenImage 10GB RGB + SRM + FFT：验证频域和高频残差信息是否提升泛化能力。
-4. `test_seen` / `test_unseen` 对比：衡量同生成器和未见生成器上的性能差异。
-5. Patch 热力图：输出局部 fake score，可用于结果解释和展示。
-6. 鲁棒性测试：JPEG 压缩、resize、blur、crop 等扰动下评估模型稳定性。
+1. 用 `prepare_defactify.py --all-generators` 整理全生成器整图数据。
+2. 用 `mobilenetv3_defactify_all.yaml` 训练 full 模型。
+3. 用 `prepare_diffseg30k_patch_demo.py` 准备局部 AIGC 展示图。
+4. 用 `batch_heatmap.py` 批量生成展示热力图。
+5. 若需要保证 Patch 效果，用 `prepare_diffseg30k_patch_dataset.py` 构造 patch-level 数据，再训练 `mobilenetv3_diffseg30k_patch.yaml`。

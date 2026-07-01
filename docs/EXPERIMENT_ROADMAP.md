@@ -1,121 +1,137 @@
 # 实验路线
 
-## 阶段 1：CIFAKE Baseline
+## 1. 快速 Baseline：CIFAKE
 
-目标：验证训练、评估、导出和推理链路完整可用。
+CIFAKE 用于验证训练链路是否可用。它的原始分辨率是 `32x32`，结果不作为最终泛化结论。
 
-配置：
+```bash
+python scripts/prepare_cifake.py --source data/cifake_raw --target data/cifake
+python -m src.train --config configs/mobilenetv3_cifake.yaml
+python -m src.evaluate --config configs/mobilenetv3_cifake.yaml --split test_seen --checkpoint outputs_cifake/best_model.pt
+```
+
+已有 baseline：
 
 ```text
-configs/mobilenetv3_cifake.yaml
+Accuracy  = 98.30%
+Precision = 97.44%
+Recall    = 99.21%
+F1-score  = 98.32%
+AUC       = 99.66%
 ```
 
-已完成结果：
+## 2. 主实验：Defactify 全生成器训练
 
-```text
-Dataset: CIFAKE
-Model: MobileNetV3-Small
-Input: RGB only
-Accuracy: 98.30%
-Precision: 97.44%
-Recall: 99.21%
-F1-score: 98.32%
-AUC: 99.66%
+Defactify / MS COCOAI 覆盖 SD2.1、SDXL、SD3、DALL-E 3、Midjourney 等生成器，下载和整理比 GenImage 更稳定。当前推荐把全部生成器都纳入训练，以提升 Patch 展示模型对不同生成痕迹的覆盖。
+
+```bash
+python scripts/prepare_defactify.py \
+  --source data/defactify_raw \
+  --target data/defactify_all \
+  --all-generators
 ```
 
-这个阶段作为工程 baseline，而不是最终泛化结论。原因是 CIFAKE 原始图像为 `32x32`，真实场景复杂度较低。
+训练 full 模型：
 
-## 阶段 2：GenImage 10GB RGB Baseline
-
-目标：在更真实、更高分辨率、更多生成器来源的数据上建立主 baseline。
-
-数据准备：
-
-```powershell
-python scripts/prepare_genimage.py --source D:\datasets\GenImage --target data/genimage_10gb --max-total-gb 10 --dry-run
-python scripts/prepare_genimage.py --source D:\datasets\GenImage --target data/genimage_10gb --max-total-gb 10
-```
-
-训练：
-
-```powershell
-python -m src.train --config configs/mobilenetv3_genimage_10gb.yaml
+```bash
+CUDA_VISIBLE_DEVICES=1 python -m src.train --config configs/mobilenetv3_defactify_all.yaml
 ```
 
 评估：
 
-```powershell
-python -m src.evaluate --config configs/mobilenetv3_genimage_10gb.yaml --split test_seen --checkpoint outputs_genimage_10gb/best_model.pt
-python -m src.evaluate --config configs/mobilenetv3_genimage_10gb.yaml --split test_unseen --checkpoint outputs_genimage_10gb/best_model.pt
+```bash
+CUDA_VISIBLE_DEVICES=1 python -m src.evaluate \
+  --config configs/mobilenetv3_defactify_all.yaml \
+  --split test_seen \
+  --checkpoint outputs_defactify_all/best_model.pt
 ```
 
-需要记录：
+说明：在 `defactify_all` 中，`test_seen` 表示全生成器测试集，不再表示 seen/unseen 划分。
+
+## 3. 泛化对照：Defactify Seen/Unseen
+
+如果需要说明跨生成器泛化困难，可以保留 seen/unseen 实验：
+
+```bash
+python scripts/prepare_defactify.py \
+  --source data/defactify_raw \
+  --target data/defactify_seen_unseen
+```
+
+默认划分：
 
 ```text
-test_seen: Accuracy / Precision / Recall / F1 / AUC
-test_unseen: Accuracy / Precision / Recall / F1 / AUC
+train/val/test_seen: SD2.1, SDXL, SD3
+test_unseen: DALL-E 3, Midjourney
 ```
 
-## 阶段 3：RGB + SRM + FFT 多分支模型
+这个实验已经显示：即便使用 full 模型，未见生成器上也可能显著失效。这个结果可以作为“整图分类模型不等价于局部泛化定位模型”的论据。
 
-目标：验证频域和高频残差特征是否提升检测效果，尤其是未见生成器泛化能力。
+## 4. Patch 展示：DiffSeg30k
 
-做法：
+准备 100 张局部 AIGC 展示图：
 
-1. 复制 `configs/mobilenetv3_genimage_10gb.yaml`。
-2. 将 `branch_mode` 改为 `full`。
-3. 输出目录改成 `outputs_genimage_10gb_full`。
+```bash
+python scripts/prepare_diffseg30k_patch_demo.py \
+  --target data/patch_demo_diffseg30k \
+  --count 100 \
+  --split validation
+```
 
-核心对比表：
+批量生成 heatmap：
+
+```bash
+CUDA_VISIBLE_DEVICES=1 python -m scripts.batch_heatmap \
+  --config configs/mobilenetv3_defactify_all.yaml \
+  --checkpoint outputs_defactify_all/best_model.pt \
+  --input-dir data/patch_demo_diffseg30k/images \
+  --output-dir outputs_defactify_all/visualizations/patch_demo \
+  --pattern "*_image.png" \
+  --limit 20 \
+  --patch 224 \
+  --stride 112
+```
+
+展示时使用三张图：
 
 ```text
-RGB only
-RGB + SRM + FFT
+diffseg30k_000_image.png          原图
+diffseg30k_000_mask_overlay.jpg   真实局部编辑区域
+diffseg30k_000_heatmap.jpg        模型 Patch 热力图
 ```
 
-重点看 `test_unseen` 上的 F1 和 AUC。如果 full 模型在 test_unseen 上更好，就能说明频域/高频分支对泛化有帮助。
+## 5. 保证 Patch 成功：Patch-Level 训练
 
-## 阶段 4：Patch 切割与局部可解释性
+只用整图 real/fake 模型直接滑窗，不能保证定位效果。要让 Patch 部分稳定成功，应使用 DiffSeg30k mask 构造 patch-level 数据：
 
-目标：从整图真假分类，扩展到局部区域可疑性分析。
-
-命令示例：
-
-```powershell
-python -m src.heatmap `
-  --config configs/mobilenetv3_genimage_10gb.yaml `
-  --checkpoint outputs_genimage_10gb/best_model.pt `
-  --image path\to\test_image.jpg `
-  --patch 224 `
-  --stride 112 `
-  --output outputs_genimage_10gb/visualizations/heatmap.jpg
+```bash
+python scripts/prepare_diffseg30k_patch_dataset.py \
+  --source data/patch_demo_diffseg30k/images \
+  --target data/diffseg30k_patch \
+  --patch 224 \
+  --stride 112 \
+  --fake-threshold 0.30 \
+  --real-threshold 0.02
 ```
 
-输出热力图用于展示模型认为哪些局部区域更像 AIGC 生成区域。
+训练 Patch 分类器：
 
-## 阶段 5：鲁棒性测试
-
-目标：模拟真实传播场景里的图像退化。
-
-建议扰动：
-
-```text
-JPEG quality: 95 / 75 / 50
-Resize: 0.5x / 0.75x / 1.25x
-Gaussian blur
-Center crop / random crop
+```bash
+CUDA_VISIBLE_DEVICES=1 python -m src.train --config configs/mobilenetv3_diffseg30k_patch.yaml
 ```
 
-建议输出表格：
+再生成 heatmap：
 
-```text
-Clean
-JPEG-95
-JPEG-75
-JPEG-50
-Resize-0.5x
-Blur
-Crop
+```bash
+CUDA_VISIBLE_DEVICES=1 python -m scripts.batch_heatmap \
+  --config configs/mobilenetv3_diffseg30k_patch.yaml \
+  --checkpoint outputs_diffseg30k_patch/best_model.pt \
+  --input-dir data/patch_demo_diffseg30k/images \
+  --output-dir outputs_diffseg30k_patch/visualizations/patch_demo \
+  --pattern "*_image.png" \
+  --limit 20 \
+  --patch 224 \
+  --stride 112
 ```
 
-每一行记录 Accuracy / F1 / AUC。
+这一版才是 Patch 创新点的可靠实验路线。

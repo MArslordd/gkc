@@ -7,14 +7,16 @@ env/
 
 data/
 outputs/
+outputs_*/
 runs/
 *.onnx
+*.onnx.data
 *.tflite
 *.pt
 *.pth
+tools/
 
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
-data/
