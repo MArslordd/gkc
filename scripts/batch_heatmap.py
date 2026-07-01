@@ -64,6 +64,10 @@ def make_heatmap(
     overlay = cv2.addWeighted(image, 0.6, heat, 0.4, 0)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(output_path), overlay)
+    score_path = output_path.with_name(output_path.name.replace("_heatmap.jpg", "_score.npy"))
+    score_png_path = output_path.with_name(output_path.name.replace("_heatmap.jpg", "_score.png"))
+    np.save(score_path, score_map)
+    cv2.imwrite(str(score_png_path), (np.clip(score_map, 0, 1) * 255).astype(np.uint8))
 
 
 def parse_args() -> argparse.Namespace:
