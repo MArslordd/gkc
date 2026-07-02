@@ -40,6 +40,18 @@ CUDA_VISIBLE_DEVICES=1 python -m src.evaluate \
   --checkpoint outputs_defactify_all/best_model.pt
 ```
 
+## Quantize Full-Image Baseline
+
+This command applies PyTorch dynamic INT8 quantization to the non-patch full-image baseline and evaluates FP32 vs INT8 on the same split:
+
+```bash
+python scripts/quantize_evaluate.py \
+  --config configs/mobilenetv3_defactify_all.yaml \
+  --checkpoint outputs_defactify_all/best_model.pt \
+  --split test_seen \
+  --output-dir outputs_defactify_all
+```
+
 ## Mosaic Patch Demo
 
 Create 2x2 local-AIGC mosaics and patch-level training samples:
